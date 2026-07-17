@@ -15,11 +15,17 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TORCH_CUDA_ARCH_LIST="8.0;9.0"
 
 # System dependencies
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#     python3.10 python3.10-dev python3.11 python3.11-dev python3-pip \
+#     git wget ninja-build libjpeg-dev libgl1 libglib2.0-0 \
+#     && rm -rf /var/lib/apt/lists/* \
+#     && ln -sf /usr/bin/python3.11 /usr/bin/python \
+#     && ln -sf /usr/bin/pip3 /usr/bin/pip
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 python3.10-dev python3.11 python3.11-dev python3-pip \
+    python3.10 python3.10-dev python3-pip \
     git wget ninja-build libjpeg-dev libgl1 libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/* \
-    && ln -sf /usr/bin/python3.11 /usr/bin/python \
+    && ln -sf /usr/bin/python3.10 /usr/bin/python \
     && ln -sf /usr/bin/pip3 /usr/bin/pip
 
 # PyTorch 2.6.0 + CUDA 12.4 (matches TRELLIS.2's tested configuration)
