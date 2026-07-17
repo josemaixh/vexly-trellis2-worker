@@ -15,12 +15,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TORCH_CUDA_ARCH_LIST="8.0;9.0"
 
 # System dependencies
-# RUN apt-get update && apt-get install -y --no-install-recommends \
-#     python3.10 python3.10-dev python3.11 python3.11-dev python3-pip \
-#     git wget ninja-build libjpeg-dev libgl1 libglib2.0-0 \
-#     && rm -rf /var/lib/apt/lists/* \
-#     && ln -sf /usr/bin/python3.11 /usr/bin/python \
-#     && ln -sf /usr/bin/pip3 /usr/bin/pip
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10 python3.10-dev python3-pip \
     git wget ninja-build libjpeg-dev libgl1 libglib2.0-0 \
@@ -60,11 +54,21 @@ RUN echo '#!/bin/bash' > /usr/local/bin/nvidia-smi && \
     chmod +x /usr/local/bin/nvidia-smi
 RUN bash -c ". ./setup.sh --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm"
 
+# Fail the build now, not 35+ minutes and a RunPod deploy later, if any
+# extension didn't actually end up importable despite setup.sh reporting
+# success. Cheap fast-fail instead of a silent crash-loop on RunPod.
+RUN python -c "import utils3d, flash_attn, nvdiffrast, cumesh, flexgemm, o_voxel; print('all extensions import OK')"
+
 # RunPod worker SDK + HF download helper
 RUN pip install --no-cache-dir runpod huggingface_hub
 
 # Bake the TRELLIS.2-4B weights into the image so workers don't download on cold start
 RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('microsoft/TRELLIS.2-4B')"
+
+# Defensive reinstall — guarantees utils3d survives into the final layer
+# regardless of anything upstream, since nothing runs after this that could
+# remove it again.
+RUN pip install --no-cache-dir git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8
 
 # RunPod handler
 COPY handler.py /workspace/TRELLIS.2/handler.py
