@@ -45,30 +45,22 @@ RUN pip install --no-cache-dir \
 ENV MAX_JOBS=2
 RUN pip install --no-cache-dir flash-attn==2.7.3 --no-build-isolation
 
-# Remaining components: nvdiffrast, nvdiffrec, cumesh, o-voxel, flexgemm
-# (--new-env and --basic are skipped since we've handled those manually above)
-# setup.sh only checks that an `nvidia-smi` command exists (not that a GPU is
-# actually attached) before proceeding, so on a GPU-less build machine like a
-# GitHub Actions runner we provide a harmless stand-in to pass that check.
-RUN echo '#!/bin/bash' > /usr/local/bin/nvidia-smi && \
-    chmod +x /usr/local/bin/nvidia-smi
-RUN bash -c ". ./setup.sh --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm"
+# Lines 1-55 remain the same...
 
-# Fail the build now, not 35+ minutes and a RunPod deploy later, if any
-# extension didn't actually end up importable despite setup.sh reporting
-# success. Cheap fast-fail instead of a silent crash-loop on RunPod.
-RUN python -c "import utils3d, flash_attn, nvdiffrast, cumesh, flexgemm, o_voxel; print('all extensions import OK')"
+# Remaining components: nvdiffrast, nvdiffrec, cumesh, o-voxel, flexgemm
+RUN bash -c ". ./setup.sh --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm"
 
 # RunPod worker SDK + HF download helper
 RUN pip install --no-cache-dir runpod huggingface_hub
 
-# Bake the TRELLIS.2-4B weights into the image so workers don't download on cold start
-RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('microsoft/TRELLIS.2-4B')"
-
-# Defensive reinstall — guarantees utils3d survives into the final layer
-# regardless of anything upstream, since nothing runs after this that could
-# remove it again.
+# Defensive reinstall of utils3d BEFORE import test
 RUN pip install --no-cache-dir git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8
+
+# Now test imports after everything is installed
+RUN python -c "import utils3d, flash_attn, nvdiffrast, cumesh, flexgemm, o_voxel; print('all extensions import OK')"
+
+# Bake the TRELLIS.2-4B weights into the image
+RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('microsoft/TRELLIS.2-4B')"
 
 # RunPod handler
 COPY handler.py /workspace/TRELLIS.2/handler.py
