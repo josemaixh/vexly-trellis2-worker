@@ -47,6 +47,11 @@ RUN pip install --no-cache-dir flash-attn==2.7.3 --no-build-isolation
 
 # Remaining components: nvdiffrast, nvdiffrec, cumesh, o-voxel, flexgemm
 # (--new-env and --basic are skipped since we've handled those manually above)
+# setup.sh only checks that an `nvidia-smi` command exists (not that a GPU is
+# actually attached) before proceeding, so on a GPU-less build machine like a
+# GitHub Actions runner we provide a harmless stand-in to pass that check.
+RUN echo '#!/bin/bash' > /usr/local/bin/nvidia-smi && \
+    chmod +x /usr/local/bin/nvidia-smi
 RUN bash -c ". ./setup.sh --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm"
 
 # RunPod worker SDK + HF download helper
