@@ -4,17 +4,9 @@ Two files, both go in the same folder:
 - `Dockerfile`
 - `handler.py`
 
-## ⚠️ Before you build
 
-This image bundles **nvdiffrec**, which is licensed under NVIDIA's
-Source Code License-NC — non-commercial research/evaluation use only.
-There's an open, unanswered issue on the TRELLIS.2 repo about whether
-this makes commercial use of TRELLIS.2 non-compliant. Keep this image
-and endpoint **internal-only** (your own testing) until that's resolved
-or you've swapped nvdiffrec for something commercially licensed — don't
-point live Vexly customer traffic at it yet.
 
-## Build — via GitHub Actions (free, no local machine needed)
+## Build — via GitHub Actions 
 
 This repo includes `.github/workflows/build.yml`, which builds the
 image on GitHub's own servers and pushes it straight to Docker Hub.
