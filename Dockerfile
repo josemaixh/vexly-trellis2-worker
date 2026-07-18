@@ -1,5 +1,10 @@
 FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
 
+# HF_TOKEN needed at build time to download gated models (DINOv3, RMBG-2.0).
+# Passed in via --build-arg, must have been granted access to both repos
+# on huggingface.co first.
+ARG HF_TOKEN
+
 # --- Internal testing/prototyping build only ---
 # nvdiffrec (a TRELLIS.2 dependency for PBR rendering) is licensed under the
 # NVIDIA Source Code License-NC, which restricts use to non-commercial
@@ -31,11 +36,21 @@ WORKDIR /workspace
 RUN git clone -b main https://github.com/microsoft/TRELLIS.2.git --recursive
 WORKDIR /workspace/TRELLIS.2
 
+# Fix: newer `transformers` versions changed DINOv3's internal structure —
+# the transformer blocks now live one level deeper (model.model.layer, not
+# model.layer). TRELLIS.2's code was written against an older transformers
+# API. Confirmed live via a RunPod Pod test.
+RUN sed -i 's/for i, layer_module in enumerate(self\.model\.layer):/for i, layer_module in enumerate(self.model.model.layer):/' \
+    trellis2/modules/image_feature_extractor.py
+
 # Basic Python dependencies (mirrors setup.sh --basic)
+# plyfile: required by o_voxel but not pulled in automatically
+# OpenEXR/Imath: opencv-python-headless's EXR support is unreliable in this
+# environment (returns None instead of raising), confirmed live on a Pod
 RUN pip install --no-cache-dir \
     imageio imageio-ffmpeg tqdm easydict opencv-python-headless ninja \
     trimesh transformers gradio==6.0.1 tensorboard pandas lpips zstandard \
-    kornia timm plyfile \
+    kornia timm plyfile OpenEXR Imath \
     && pip install --no-cache-dir utils3d
 
 # flash-attention — compiled from source. MAX_JOBS caps parallel compile
@@ -45,6 +60,11 @@ RUN pip install --no-cache-dir \
 ENV MAX_JOBS=2
 RUN pip install --no-cache-dir flash-attn==2.7.3 --no-build-isolation
 
+# Remaining components: nvdiffrast, nvdiffrec, cumesh, o-voxel, flexgemm
+# (--new-env and --basic are skipped since we've handled those manually above)
+# setup.sh only checks that an `nvidia-smi` command exists (not that a GPU is
+# actually attached) before proceeding, so on a GPU-less build machine like a
+# GitHub Actions runner we provide a harmless stand-in to pass that check.
 RUN echo '#!/bin/bash' > /usr/local/bin/nvidia-smi && \
     chmod +x /usr/local/bin/nvidia-smi
 RUN bash -c ". ./setup.sh --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm"
@@ -63,6 +83,11 @@ RUN pip install --no-cache-dir runpod huggingface_hub
 
 # Bake the TRELLIS.2-4B weights into the image so workers don't download on cold start
 RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('microsoft/TRELLIS.2-4B')"
+
+# Bake the gated DINOv3 and RMBG-2.0 weights too — both require HF_TOKEN
+# with access already granted on huggingface.co for each repo
+RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('facebook/dinov3-vitl16-pretrain-lvd1689m', token='${HF_TOKEN}')"
+RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('briaai/RMBG-2.0', token='${HF_TOKEN}')"
 
 # RunPod handler
 COPY handler.py /workspace/TRELLIS.2/handler.py
