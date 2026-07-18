@@ -16,10 +16,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 python3.10-dev python3-pip \
+    python3.10 python3.10-dev python3.11 python3.11-dev python3-pip \
     git wget ninja-build libjpeg-dev libgl1 libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/* \
-    && ln -sf /usr/bin/python3.10 /usr/bin/python \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python \
     && ln -sf /usr/bin/pip3 /usr/bin/pip
 
 # PyTorch 2.6.0 + CUDA 12.4 (matches TRELLIS.2's tested configuration)
@@ -36,7 +36,7 @@ RUN pip install --no-cache-dir \
     imageio imageio-ffmpeg tqdm easydict opencv-python-headless ninja \
     trimesh transformers gradio==6.0.1 tensorboard pandas lpips zstandard \
     kornia timm \
-    && pip install --no-cache-dir git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8
+    && pip install --no-cache-dir "utils3d @ git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8"
 
 # flash-attention — compiled from source. MAX_JOBS caps parallel compile
 # workers so this fits within GitHub Actions' free-runner RAM (~7GB).
@@ -57,13 +57,7 @@ RUN bash -c ". ./setup.sh --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm
 # RunPod worker SDK + HF download helper
 RUN pip install --no-cache-dir runpod huggingface_hub
 
-# Defensive reinstall of utils3d BEFORE import test
-RUN pip install --no-cache-dir git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8
-
-# Now test imports after everything is installed
-RUN python -c "import utils3d, flash_attn, nvdiffrast, cumesh, flexgemm, o_voxel; print('all extensions import OK')"
-
-# Bake the TRELLIS.2-4B weights into the image
+# Bake the TRELLIS.2-4B weights into the image so workers don't download on cold start
 RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('microsoft/TRELLIS.2-4B')"
 
 # RunPod handler
