@@ -39,4 +39,8 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/trellis2-vexly:latest
+          build-args: |
+            HF_TOKEN=${{ secrets.HF_TOKEN }}
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/trellis2-vexly:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/trellis2-vexly:${{ github.sha }}
