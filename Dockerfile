@@ -36,7 +36,7 @@ RUN pip install --no-cache-dir \
     imageio imageio-ffmpeg tqdm easydict opencv-python-headless ninja \
     trimesh transformers gradio==6.0.1 tensorboard pandas lpips zstandard \
     kornia timm \
-    && pip install --no-cache-dir "utils3d @ git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8"
+    && pip install --no-cache-dir utils3d
 
 # flash-attention — compiled from source. MAX_JOBS caps parallel compile
 # workers so this fits within GitHub Actions' free-runner RAM (~7GB).
