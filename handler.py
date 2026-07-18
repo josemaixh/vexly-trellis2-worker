@@ -1,13 +1,11 @@
-import os
-
-os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-
 import base64
 import io
 import tempfile
 
 import cv2
+import numpy as np
+import OpenEXR
+import Imath
 import torch
 from PIL import Image
 
@@ -20,17 +18,30 @@ import o_voxel
 MODEL_ID = "microsoft/TRELLIS.2-4B"
 ENVMAP_PATH = "assets/hdri/forest.exr"  # ships with the TRELLIS.2 repo
 
+
+def _load_exr(path):
+    """opencv's EXR support is unreliable in this environment (returns None
+    instead of raising an error), confirmed via live testing on a RunPod
+    Pod. Use the official OpenEXR bindings instead."""
+    exr_file = OpenEXR.InputFile(path)
+    dw = exr_file.header()["dataWindow"]
+    width = dw.max.x - dw.min.x + 1
+    height = dw.max.y - dw.min.y + 1
+    pt = Imath.PixelType(Imath.PixelType.FLOAT)
+    channels = [
+        np.frombuffer(exr_file.channel(c, pt), dtype=np.float32).reshape(height, width)
+        for c in ("R", "G", "B")
+    ]
+    return np.stack(channels, axis=-1)
+
+
 # Loaded once per worker at cold start, reused across warm requests
 print("Loading TRELLIS.2 pipeline...")
 pipeline = Trellis2ImageTo3DPipeline.from_pretrained(MODEL_ID)
 pipeline.cuda()
 
 envmap = EnvMap(
-    torch.tensor(
-        cv2.cvtColor(cv2.imread(ENVMAP_PATH, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB),
-        dtype=torch.float32,
-        device="cuda",
-    )
+    torch.tensor(_load_exr(ENVMAP_PATH), dtype=torch.float32, device="cuda")
 )
 print("Pipeline ready.")
 
