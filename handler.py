@@ -1,8 +1,10 @@
 import base64
 import io
+import os
 import tempfile
+import uuid
 
-import cv2
+import boto3
 import numpy as np
 import OpenEXR
 import Imath
@@ -17,6 +19,21 @@ import o_voxel
 
 MODEL_ID = "microsoft/TRELLIS.2-4B"
 ENVMAP_PATH = "assets/hdri/forest.exr"  # ships with the TRELLIS.2 repo
+
+# Backblaze B2 (S3-compatible) — GLB outputs are uploaded here instead of
+# returned as raw base64, since high-quality outputs can exceed RunPod's
+# 20MB /runsync response limit. Configure via environment variables.
+B2_ENDPOINT_URL = os.environ.get("B2_ENDPOINT_URL", "https://s3.us-east-005.backblazeb2.com")
+B2_BUCKET_NAME = os.environ["B2_BUCKET_NAME"]
+B2_KEY_ID = os.environ["B2_KEY_ID"]
+B2_APPLICATION_KEY = os.environ["B2_APPLICATION_KEY"]
+
+s3_client = boto3.client(
+    "s3",
+    endpoint_url=B2_ENDPOINT_URL,
+    aws_access_key_id=B2_KEY_ID,
+    aws_secret_access_key=B2_APPLICATION_KEY,
+)
 
 
 def _load_exr(path):
@@ -58,7 +75,7 @@ def handler(job):
     }
 
     Returns:
-    { "glb_base64": "<base64-encoded .glb file>" }
+    { "glb_key": "<B2 object key, e.g. 'models/<uuid>.glb'>" }
     or
     { "error": "<message>" }
     """
@@ -69,7 +86,7 @@ def handler(job):
 
     try:
         image_bytes = base64.b64decode(image_b64)
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGBA").convert("RGB")
     except Exception as e:
         return {"error": f"Could not decode input image: {e}"}
 
@@ -101,7 +118,19 @@ def handler(job):
             tmp.seek(0)
             glb_bytes = tmp.read()
 
-        return {"glb_base64": base64.b64encode(glb_bytes).decode("utf-8")}
+        # Upload to B2 and return the object's key (not a URL). Vexly's
+        # backend stores this key alongside the menu item in its database,
+        # and can look the file up in the bucket whenever it's needed —
+        # decouples the handler from bucket visibility/URL format entirely.
+        object_key = f"models/{uuid.uuid4()}.glb"
+        s3_client.put_object(
+            Bucket=B2_BUCKET_NAME,
+            Key=object_key,
+            Body=glb_bytes,
+            ContentType="model/gltf-binary",
+        )
+
+        return {"glb_key": object_key}
 
     except Exception as e:
         return {"error": f"Generation failed: {e}"}
